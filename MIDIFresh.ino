@@ -47,7 +47,7 @@ bool addr0x36 = true;
 #include "Fonts/FreeSans18pt7b.h"
 #include "Fonts/FreeMono12pt7b.h"
 
-char *mainver = "0.03";  // version
+char *mainver = "0.10";  // version
 
 // Midi Channel
 const uint8_t midi_channel = 0;
@@ -75,6 +75,13 @@ int knob3_pin = A2;    // knob3 anaglog pin
 int knob3_min = 3;     // Minimum value for knob3
 int knob3_max = 4095;  // maximum value for knob3
 int knob3_midi = 13;   // MIDI Control # for knob3
+
+//The default buttons
+const int buttonPinD0 = 0; // Replace D1 with the actual pin number
+const int buttonPinD1 = 1; // Replace D1 with the actual pin number
+const int buttonPinD2 = 2; // Replace D2 with the actual pin number
+
+
 
 int sleep_timeout = 360;  // Bluetooth timeout before unit goes to sleep to save battery unit X 500ms  = 3 Minutes
 int jitter_delay = 50;    // A delay after sending midi to stop some jitter.
@@ -111,6 +118,10 @@ void setup() {
   tft.init(135, 240);  // Init ST7789 240x135
   tft.setRotation(3);
 
+// Button Setup. 
+  pinMode(buttonPinD0, INPUT_PULLUP); // Use INPUT_PULLDOWN for D0
+  pinMode(buttonPinD1, INPUT_PULLDOWN); // Use INPUT_PULLDOWN for D1
+  pinMode(buttonPinD2, INPUT_PULLDOWN); // Use INPUT_PULLDOWN for D2
 
   tft.fillScreen(ST77XX_BLACK);
   tft.setCursor(0, 20);
@@ -144,6 +155,29 @@ void loop() {
       tft.printf("\nConnected.\n");
       tft_update = 0;
     }
+ // Button D0 
+    int buttonStateD0 = digitalRead(buttonPinD0);
+          if (buttonStateD0 == LOW) { 
+                 BLEMidiServer.noteOn(midi_channel, 69, 127);
+                 delay(300);
+                 BLEMidiServer.noteOff(midi_channel, 69, 127);           
+          }
+          
+    // Button D1 
+    int buttonStateD1 = digitalRead(buttonPinD1);
+          if (buttonStateD1 == HIGH) { 
+                 BLEMidiServer.noteOn(midi_channel, 71, 127);
+                 delay(300);
+                 BLEMidiServer.noteOff(midi_channel, 71, 127);           
+          }
+
+    // Button D2
+    int buttonStateD2 = digitalRead(buttonPinD2);
+          if (buttonStateD2 == HIGH) { 
+                BLEMidiServer.noteOn(midi_channel, 72, 127);
+                delay(300);
+                BLEMidiServer.noteOff(midi_channel, 72, 127);           
+          }
 
     // Crossfader
     int cross_fader = map(analogRead(crossfader_pin), crossfader_min, crossfader_max, 0, 127);
