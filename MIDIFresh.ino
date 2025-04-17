@@ -29,14 +29,14 @@
 #include <Adafruit_GFX.h>     // Core graphics library
 #include <Adafruit_ST7789.h>  // Hardware-specific library for ST7789
 #include <SPI.h>
-#include <Wire.h>              // One Wire lib 
-#include "Adafruit_MAX1704X.h" // Battery meter lib. 
+#include <Wire.h>               // One Wire lib
+#include "Adafruit_MAX1704X.h"  // Battery meter lib.
 
 
 // Init Screen
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
-// Init Battery Monitor 
+// Init Battery Monitor
 Adafruit_MAX17048 maxlipo;
 bool addr0x36 = true;
 
@@ -54,45 +54,46 @@ const uint8_t midi_channel = 0;
 
 // Crossfader
 int crossfader_pin = A3;    // crossfader anaglog pin
-int crossfader_min = 3;    // Minimum value for crossfader
+int crossfader_min = 3;     // Minimum value for crossfader
 int crossfader_max = 4095;  // maximum value for crossfader
 int crossfader_midi = 10;   // MIDI Control # for crossfader
 
 // Knob1
 int knob1_pin = A0;    // knob1 anaglog pin
-int knob1_min = 1;    // Minimum value for knob1
+int knob1_min = 1;     // Minimum value for knob1
 int knob1_max = 4095;  // maximum value for knob1
 int knob1_midi = 11;   // MIDI Control # for knob1
 
 // Knob2
 int knob2_pin = A1;    // knob2 anaglog pin
-int knob2_min = 3;    // Minimum value for knob2
+int knob2_min = 3;     // Minimum value for knob2
 int knob2_max = 4095;  // maximum value for knob2
 int knob2_midi = 12;   // MIDI Control # for knob2
 
 // Knob3
 int knob3_pin = A2;    // knob3 anaglog pin
-int knob3_min = 3;    // Minimum value for knob3
+int knob3_min = 3;     // Minimum value for knob3
 int knob3_max = 4095;  // maximum value for knob3
 int knob3_midi = 13;   // MIDI Control # for knob3
 
-int sleep_timeout = 360; // Bluetooth timeout before unit goes to sleep to save battery unit X 500ms  = 3 Minutes 
+int sleep_timeout = 360;  // Bluetooth timeout before unit goes to sleep to save battery unit X 500ms  = 3 Minutes
+int jitter_delay = 50;    // A delay after sending midi to stop some jitter.
 
 // globals
 int old_cross_fader = 0;
 int old_knob1 = 0;
 int old_knob2 = 0;
-int old_knob3 = 0; 
+int old_knob3 = 0;
 int tft_update = 0;
-int batt =0; 
+int dyn_update = 0;
+int batt = 0;
+GFXcanvas1 canvas(230, 67);  // 230x67 pixel canvas for screen update
+
 
 void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  Serial.println("Initializing bluetooth");
-  BLEMidiServer.begin("MIDIFresh");
-  Serial.println("Ready for connections...");
 
+  // Setup Bluetooth.
+  BLEMidiServer.begin("MIDIFresh");
   // Setup Battery monitor
   maxlipo.begin();
   addr0x36 = true;
@@ -129,7 +130,7 @@ void loop() {
 
 
   if (BLEMidiServer.isConnected()) {
-    if(tft_update == 1){ 
+    if (tft_update == 1) {
       tft.fillScreen(ST77XX_BLACK);
       tft.setCursor(0, 25);
       tft.setTextColor(ST77XX_CYAN);
@@ -141,53 +142,60 @@ void loop() {
       tft.setFont(&FreeSans12pt7b);
       tft.setTextColor(ST77XX_YELLOW);
       tft.printf("\nConnected.\n");
-      tft_update = 0; 
+      tft_update = 0;
     }
 
     // Crossfader
     int cross_fader = map(analogRead(crossfader_pin), crossfader_min, crossfader_max, 0, 127);
     if (cross_fader != old_cross_fader) {
       old_cross_fader = cross_fader;
-      Serial.printf("cross_fader = %d, \n", cross_fader);
       BLEMidiServer.controlChange(midi_channel, crossfader_midi, cross_fader);
+      delay(jitter_delay);
     }
 
     // Knob 1
     int knob1 = map(analogRead(knob1_pin), knob1_min, knob1_max, 0, 127);
     if (knob1 != old_knob1) {
       old_knob1 = knob1;
-      Serial.printf("knob1 = %d, \n", knob1);
       BLEMidiServer.controlChange(midi_channel, knob1_midi, knob1);
+      delay(jitter_delay);
     }
 
     // Knob 2
     int knob2 = map(analogRead(knob2_pin), knob2_min, knob2_max, 0, 127);
     if (knob2 != old_knob2) {
       old_knob2 = knob2;
-      Serial.printf("knob2 = %d, \n", knob2);
       BLEMidiServer.controlChange(midi_channel, knob2_midi, knob2);
-    } 
-    
+      delay(jitter_delay);
+    }
+
     // Knob 3
     int knob3 = map(analogRead(knob3_pin), knob3_min, knob3_max, 0, 127);
     if (knob3 != old_knob3) {
       old_knob3 = knob3;
-      Serial.printf("knob3 = %d, \n", knob3);
       BLEMidiServer.controlChange(midi_channel, knob3_midi, knob3);
+      delay(jitter_delay);
     }
 
-// Update the display with some usefull info 
-  tft.setCursor(00, 80);
-  tft.setTextColor(ST77XX_WHITE);
-  batt = maxlipo.cellPercent();
-  tft.printf("BAT %d %",batt);
+    if (dyn_update == 0) {
+      // Update the display with some usefull info
+      batt = maxlipo.cellPercent();
+      canvas.fillScreen(ST77XX_BLACK);
+      canvas.setCursor(0, 24);
+      canvas.setFont(&FreeSans12pt7b);
+      canvas.printf("Bat %03d X-Fader %03d\nK3 %03d 2 %03d 1 %03d", batt, cross_fader, knob3, knob2, knob1);
+      tft.drawBitmap(00, 67, canvas.getBuffer(), 230, 67, ST77XX_WHITE, ST77XX_BLACK);
+      dyn_update = 1000;  // Update the display every 20,000 cycles to not slowdown midi
+    }
+
+    dyn_update = dyn_update - 1;
 
   } else {
-    // Check if we need to go to powersave 
-       sleep_timeout = sleep_timeout - 1; 
-      if(sleep_timeout ==0){
-          esp_deep_sleep_start(); // Put ESP32 into deep sleep mode to save battery 
-      }
+    // Check if we need to go to powersave
+    sleep_timeout = sleep_timeout - 1;
+    if (sleep_timeout == 0) {
+      esp_deep_sleep_start();  // Put ESP32 into deep sleep mode to save batter
+    }
 
     if (tft_update == 0) {
       // Display waiting to connect bluetooth.
@@ -204,9 +212,11 @@ void loop() {
       tft.printf("\nWaiting for Bluetooth.\n");
       tft.setTextColor(ST77XX_RED);
       tft.printf("Will sleep if not found.");
+      tft.setTextColor(ST77XX_WHITE);
+      batt = maxlipo.cellPercent();
+      tft.printf("Bat %03d", batt);
       tft_update = 1;
-   
     }
-    delay(500); 
+    delay(500);
   }
 }
