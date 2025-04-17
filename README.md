@@ -11,6 +11,7 @@ The project uses an Adafruit ESP32-S3 Reverse TFT Feather Microcontroller at the
 There are included .stl files to print the case my design is simple and a bit steam punk with the microcontroller on the external side.  Likely a nicer case could be produced. 
 </p>
 
+<img src="images/IMG_2146.jpeg">
 
 <h3>Parts List. </h3>
 <pre>
