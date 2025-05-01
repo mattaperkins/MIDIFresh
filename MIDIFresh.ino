@@ -31,6 +31,7 @@
 #include <SPI.h>
 #include <Wire.h>               // One Wire lib
 #include "Adafruit_MAX1704X.h"  // Battery meter lib.
+#include <LiteLED.h>            // LiteLED ES2812 Library for Glowbit 4x4 matrix
 
 
 // Init Screen
@@ -47,7 +48,7 @@ bool addr0x36 = true;
 #include "Fonts/FreeSans18pt7b.h"
 #include "Fonts/FreeMono12pt7b.h"
 
-char *mainver = "0.10";  // version
+char *mainver = "0.20";  // version
 
 // Midi Channel
 const uint8_t midi_channel = 0;
@@ -77,14 +78,41 @@ int knob3_max = 4095;  // maximum value for knob3
 int knob3_midi = 13;   // MIDI Control # for knob3
 
 //The default buttons
-const int buttonPinD0 = 0; // Replace D1 with the actual pin number
-const int buttonPinD1 = 1; // Replace D1 with the actual pin number
-const int buttonPinD2 = 2; // Replace D2 with the actual pin number
+const int buttonPinD0 = 0;  // Replace D1 with the actual pin number
+const int buttonPinD1 = 1;  // Replace D1 with the actual pin number
+const int buttonPinD2 = 2;  // Replace D2 with the actual pin number
 
 
 
 int sleep_timeout = 360;  // Bluetooth timeout before unit goes to sleep to save battery unit X 500ms  = 3 Minutes
 int jitter_delay = 50;    // A delay after sending midi to stop some jitter.
+
+// Globit Init
+#define LED_TYPE LED_STRIP_WS2812
+
+#define LED_TYPE_IS_RGBW 0  // if the LED matrix uses RGBW type LED's, change the 0 to 1
+
+#define LED_GPIO 5  // change this number to be the GPIO pin connected to DIN of the matrix panel
+#define MTRIX_X_SIZE 4
+#define MTRIX_LEDS (MTRIX_X_SIZE * MTRIX_X_SIZE)  // total number of LED's in the matrix panel
+#define A_DELAY 75                                // # of ms delay between animations within a test
+#define TST_PAUSE 1000                            // # of ms to pause between tests
+#define REPEAT_DELAY 3000                         // # of ms to delay before repeating all tests
+
+static const uint8_t currBright = 255;  // change this to set the brightness level of the matrix
+size_t c = 0;                           // picker for the colour of the LEDs for the currrent test
+static const crgb_t L_BLACK = 0x000000;
+static const crgb_t colors[] = {
+  0x2f0000, /* red */
+  0x002f00, /* green */
+  0x00002f, /* blue */
+  0x0f0f0f  /* white */
+};
+#define COLORS_TOTAL (sizeof(colors) / sizeof(crgb_t))
+LiteLED myDisplay(LED_TYPE, LED_TYPE_IS_RGBW);  // create the LiteLED object
+
+
+
 
 // globals
 int old_cross_fader = 0;
@@ -98,6 +126,10 @@ GFXcanvas1 canvas(230, 67);  // 230x67 pixel canvas for screen update
 
 
 void setup() {
+  // Glowbit INIT
+  myDisplay.begin(LED_GPIO, MTRIX_LEDS);  // initialze the myDisplay object.
+  myDisplay.brightness(currBright);
+  myDisplay.fill(0x00002f, 2);
 
   // Setup Bluetooth.
   BLEMidiServer.begin("MIDIFresh");
@@ -118,10 +150,10 @@ void setup() {
   tft.init(135, 240);  // Init ST7789 240x135
   tft.setRotation(3);
 
-// Button Setup. 
-  pinMode(buttonPinD0, INPUT_PULLUP); // Use INPUT_PULLDOWN for D0
-  pinMode(buttonPinD1, INPUT_PULLDOWN); // Use INPUT_PULLDOWN for D1
-  pinMode(buttonPinD2, INPUT_PULLDOWN); // Use INPUT_PULLDOWN for D2
+  // Button Setup.
+  pinMode(buttonPinD0, INPUT_PULLUP);    // Use INPUT_PULLDOWN for D0
+  pinMode(buttonPinD1, INPUT_PULLDOWN);  // Use INPUT_PULLDOWN for D1
+  pinMode(buttonPinD2, INPUT_PULLDOWN);  // Use INPUT_PULLDOWN for D2
 
   tft.fillScreen(ST77XX_BLACK);
   tft.setCursor(0, 20);
@@ -155,35 +187,53 @@ void loop() {
       tft.printf("\nConnected.\n");
       tft_update = 0;
     }
- // Button D0 
+    // Button D0
     int buttonStateD0 = digitalRead(buttonPinD0);
-          if (buttonStateD0 == LOW) { 
-                 BLEMidiServer.noteOn(midi_channel, 69, 127);
-                 delay(300);
-                 BLEMidiServer.noteOff(midi_channel, 69, 127);           
-          }
-          
-    // Button D1 
+    if (buttonStateD0 == LOW) {
+      BLEMidiServer.noteOn(midi_channel, 69, 127);
+      delay(300);
+      BLEMidiServer.noteOff(midi_channel, 69, 127);
+    }
+
+    // Button D1
     int buttonStateD1 = digitalRead(buttonPinD1);
-          if (buttonStateD1 == HIGH) { 
-                 BLEMidiServer.noteOn(midi_channel, 71, 127);
-                 delay(300);
-                 BLEMidiServer.noteOff(midi_channel, 71, 127);           
-          }
+    if (buttonStateD1 == HIGH) {
+      BLEMidiServer.noteOn(midi_channel, 71, 127);
+      delay(300);
+      BLEMidiServer.noteOff(midi_channel, 71, 127);
+    }
 
     // Button D2
     int buttonStateD2 = digitalRead(buttonPinD2);
-          if (buttonStateD2 == HIGH) { 
-                BLEMidiServer.noteOn(midi_channel, 72, 127);
-                delay(300);
-                BLEMidiServer.noteOff(midi_channel, 72, 127);           
-          }
+    if (buttonStateD2 == HIGH) {
+      BLEMidiServer.noteOn(midi_channel, 72, 127);
+      delay(300);
+      BLEMidiServer.noteOff(midi_channel, 72, 127);
+    }
 
     // Crossfader
     int cross_fader = map(analogRead(crossfader_pin), crossfader_min, crossfader_max, 0, 127);
     if (cross_fader != old_cross_fader) {
       old_cross_fader = cross_fader;
       BLEMidiServer.controlChange(midi_channel, crossfader_midi, cross_fader);
+
+      int brightness;
+
+      if (cross_fader <= 64) {
+        // Left side: 1 → 255, 64 → 0
+        brightness = map(constrain(cross_fader, 1, 64), 1, 64, 255, 0);
+        myDisplay.fill(0x2f0000, 1);
+      } else {
+        // Right side: 65 → 0, 127 → 255
+        brightness = map(constrain(cross_fader, 65, 127), 65, 127, 0, 255);
+        myDisplay.fill(0x002f00, 1);
+      }
+
+      myDisplay.brightness(brightness);
+
+
+
+
       delay(jitter_delay);
     }
 
@@ -228,6 +278,8 @@ void loop() {
     // Check if we need to go to powersave
     sleep_timeout = sleep_timeout - 1;
     if (sleep_timeout == 0) {
+      myDisplay.brightness(0, 1);
+      myDisplay.clear(1);
       esp_deep_sleep_start();  // Put ESP32 into deep sleep mode to save batter
     }
 
