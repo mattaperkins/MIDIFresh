@@ -280,6 +280,7 @@ void loop() {
     if (sleep_timeout == 0) {
       myDisplay.brightness(0, 1);
       myDisplay.clear(1);
+      maxlipo.hibernate();
       esp_deep_sleep_start();  // Put ESP32 into deep sleep mode to save batter
     }
 
